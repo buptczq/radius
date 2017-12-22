@@ -3,16 +3,14 @@ package radius_test
 import (
 	"context"
 	"fmt"
+	"github.com/buptczq/go-radius"
 	"net"
 	"testing"
 	"time"
-
-	"layeh.com/radius"
-	. "layeh.com/radius/rfc2865"
 )
 
 func TestPacketServer_basic(t *testing.T) {
-	addr, err := net.ResolveUDPAddr("udp", "localhost:0")
+	addr, err := net.ResolveUDPAddr("udp", "localhost:1812")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -25,8 +23,9 @@ func TestPacketServer_basic(t *testing.T) {
 
 	server := radius.PacketServer{
 		SecretSource: radius.StaticSecretSource(secret),
+		Dictionary:   radius.Builtin,
 		Handler: radius.HandlerFunc(func(w radius.ResponseWriter, r *radius.Request) {
-			username := UserName_GetString(r.Packet)
+			username := r.Packet.Value("User-Name").(string)
 			if username == "tim" {
 				w.Write(r.Response(radius.CodeAccessAccept))
 			} else {
@@ -40,7 +39,7 @@ func TestPacketServer_basic(t *testing.T) {
 		defer server.Shutdown(context.Background())
 
 		packet := radius.New(radius.CodeAccessRequest, secret)
-		UserName_SetString(packet, "tim")
+		packet.Set("User-Name", "tim")
 		client := radius.Client{
 			Retry: time.Millisecond * 50,
 		}
