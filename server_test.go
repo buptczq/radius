@@ -3,7 +3,7 @@ package radius_test
 import (
 	"context"
 	"fmt"
-	"github.com/buptczq/go-radius"
+	"github.com/buptczq/radius"
 	"net"
 	"testing"
 	"time"

@@ -44,7 +44,7 @@ func (a Attributes) Del(key byte) {
 
 // Get returns the first Attribute of Type key. nil is returned if no Attribute
 // of Type key exists in a.
-func (a Attributes) Get(key byte) Attribute {
+func (a Attributes) GetRaw(key byte) Attribute {
 	attr, _ := a.Lookup(key)
 	return attr
 }
@@ -156,4 +156,24 @@ func (a Attributes) Set(name string, value interface{}) error {
 		a.Add(26, EncodeAVPairByte(entry.OID, entry.Type, attr))
 	}
 	return nil
+}
+
+// Get returns the value of the first attribute whose type matches
+// the given type. nil is returned if no such attribute exists.
+func (a Attributes) Get(t byte) interface{} {
+	if data, ok := a.Lookup(t); ok {
+		if v, err := Builtin.Codec(0, t).Decode(data); err == nil {
+			return v
+		}
+	}
+	return nil
+}
+
+func (a Attributes) GetString(t byte) string {
+	if data, ok := a.Lookup(t); ok {
+		if v, err := Builtin.Codec(0, t).Decode(data); err == nil {
+			return fmt.Sprintf("%v", v)
+		}
+	}
+	return ""
 }
