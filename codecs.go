@@ -19,6 +19,7 @@ const (
 	AttributeDate
 	AttributeInteger
 	AttributeSigned
+	AttributeShort
 	AttributeIPv6Addr
 	AttributeIPv6Prefix
 	AttributeIFID
@@ -43,6 +44,8 @@ func (t AttributeType) String() string {
 		return "integer"
 	case AttributeSigned:
 		return "signed"
+	case AttributeShort:
+		return "short"
 	case AttributeIPv6Addr:
 		return "ipv6addr"
 	case AttributeIPv6Prefix:
@@ -69,6 +72,7 @@ func init() {
 	Codecs[AttributeDate] = attributeDate{}
 	Codecs[AttributeInteger] = attributeInteger{}
 	Codecs[AttributeSigned] = attributeSigned{}
+	Codecs[AttributeShort] = attributeShort{}
 	Codecs[AttributeIPv6Addr] = attributeAddress6{}
 	// TODO: ipv6 prefix
 	Codecs[AttributeIPv6Prefix] = attributeOctets{}
@@ -197,7 +201,7 @@ func (attributeSigned) Transform(value interface{}) (interface{}, error) {
 		a := reflect.ValueOf(t).Uint() // a has type uint64
 		return int32(a), nil
 	}
-	return nil, errors.New("invalid integer attribute")
+	return nil, errors.New("invalid signed attribute")
 }
 
 type attributeInteger struct{}
@@ -259,7 +263,7 @@ func (attributeInteger64) Transform(value interface{}) (interface{}, error) {
 		a := reflect.ValueOf(t).Uint() // a has type uint64
 		return uint64(a), nil
 	}
-	return nil, errors.New("invalid integer attribute")
+	return nil, errors.New("invalid integer64 attribute")
 }
 
 type attributeDate struct{}
@@ -279,4 +283,35 @@ func (attributeDate) Encode(value interface{}) (Attribute, error) {
 	raw := make(Attribute, 4)
 	binary.BigEndian.PutUint32(raw, uint32(timestamp.Unix()))
 	return raw, nil
+}
+
+type attributeShort struct{}
+
+func (attributeShort) Decode(value Attribute) (interface{}, error) {
+	if len(value) != 2 {
+		return nil, errors.New("signed attribute has invalid size")
+	}
+	return uint16(binary.BigEndian.Uint16(value)), nil
+}
+
+func (attributeShort) Encode(value interface{}) (Attribute, error) {
+	integer, ok := value.(uint16)
+	if !ok {
+		return nil, errors.New("short attribute must be uint16")
+	}
+	raw := make(Attribute, 2)
+	binary.BigEndian.PutUint16(raw, (uint16)(integer))
+	return raw, nil
+}
+
+func (attributeShort) Transform(value interface{}) (interface{}, error) {
+	switch t := value.(type) {
+	case int, int8, int16, int32, int64:
+		a := reflect.ValueOf(t).Int() // a has type int64
+		return uint16(a), nil
+	case uint, uint8, uint16, uint32, uint64:
+		a := reflect.ValueOf(t).Uint() // a has type uint64
+		return uint16(a), nil
+	}
+	return nil, errors.New("invalid short attribute")
 }

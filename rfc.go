@@ -334,7 +334,7 @@ func init() {
 	Builtin.MustRegisterEx("Management-Privilege-Level", 0, 136, false, 0, AttributeInteger)
 	Builtin.MustRegisterEx("PKM-Config-Settings", 0, 139, false, 0, AttributeOctets)
 	Builtin.MustRegisterEx("PKM-Cryptosuite-List", 0, 140, false, 0, AttributeOctets)
-	Builtin.MustRegisterEx("PKM-SAID", 0, 141, false, 0, AttributeUnknown)
+	Builtin.MustRegisterEx("PKM-SAID", 0, 141, false, 0, AttributeShort)
 	Builtin.MustRegisterEx("PKM-SA-Descriptor", 0, 142, false, 0, AttributeOctets)
 	Builtin.MustRegisterEx("PKM-Auth-Key", 0, 143, false, 0, AttributeOctets)
 	Builtin.MustRegisterEx("DS-Lite-Tunnel-Name", 0, 144, false, 0, AttributeString)

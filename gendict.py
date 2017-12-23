@@ -9,6 +9,8 @@ attrMap = {
     "ipaddr"     : "AttributeIPAddr",
     "date"       : "AttributeDate",
     "integer"    : "AttributeInteger",
+    "signed"     : "AttributeSigned",
+    "short"      : "AttributeShort",
     "ipv6addr"   : "AttributeIPv6Addr",
     "ipv6prefix" : "AttributeIPv6Prefix",
     "ifid"       : "AttributeIFID",
@@ -43,9 +45,9 @@ for k in d.attributes:
     oid = d.vendors[attr.vendor]
     key = makeKey(oid, attr.code)
 
-    # print attr.vendor
-    # for vname, value in attr.values.forward.items():
-        # print vname, value.encode('hex')
+    # if attr.type == 'integer':
+        # for vname, value in attr.values.forward.items():
+            # print vname, value.encode('hex')
 
     newName = 'Attr' + attr.name.replace('-','')
     output.append((key, tmpl.format(

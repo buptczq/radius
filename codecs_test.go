@@ -254,3 +254,38 @@ func TestAttributeDate_Error(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAttributeShort(t *testing.T) {
+	wired, err := Codecs[AttributeShort].Encode(uint16(1412))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(wired, []byte{5, 132}) {
+		t.Fail()
+	}
+	integer, err := Codecs[AttributeShort].Decode([]byte{255, 255})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if integer.(uint16) != 65535 {
+		t.Fail()
+	}
+	ai := attributeShort{}
+	if v, _ := ai.Transform(int64(6000)); v.(uint16) != 6000 {
+		t.Fail()
+	}
+	if v, _ := ai.Transform(uint64(6000)); v.(uint16) != 6000 {
+		t.Fail()
+	}
+}
+
+func TestAttributeShort_Error(t *testing.T) {
+	_, err := Codecs[AttributeShort].Encode(uint32(123456))
+	if err == nil {
+		t.Fatal(err)
+	}
+	_, err = Codecs[AttributeShort].Decode([]byte{255, 255, 255})
+	if err == nil {
+		t.Fatal(err)
+	}
+}

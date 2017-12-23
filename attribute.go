@@ -7,6 +7,7 @@ type Attribute []byte
 
 // AttributeKey represents a attribute key
 // AttributeKey = VENDOR << 32 | TAG << 8 | Type
+// TAG MUST be zero in dictionary
 type AttributeKey uint64
 
 // golang 1.9
@@ -30,6 +31,14 @@ func (k AttributeKey) Tag() byte {
 
 func (k AttributeKey) Type() byte {
 	return byte(uint64(k) & TYPE_MASK)
+}
+
+func (k AttributeKey) WithTag(tag byte) AttributeKey {
+	return AttributeKey((uint64(k) & ^TAG_MASK) | uint64(tag)<<8)
+}
+
+func (k AttributeKey) WithoutTag() AttributeKey {
+	return AttributeKey(uint64(k) & ^TAG_MASK)
 }
 
 func (k AttributeKey) String() string {
