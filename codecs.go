@@ -66,7 +66,7 @@ func init() {
 	Codecs[AttributeString] = attributeString{}
 	Codecs[AttributeOctets] = attributeOctets{}
 	Codecs[AttributeIPAddr] = attributeAddress{}
-	Codecs[AttributeDate] = attributeTime{}
+	Codecs[AttributeDate] = attributeDate{}
 	Codecs[AttributeInteger] = attributeInteger{}
 	Codecs[AttributeSigned] = attributeSigned{}
 	Codecs[AttributeIPv6Addr] = attributeAddress6{}
@@ -262,16 +262,16 @@ func (attributeInteger64) Transform(value interface{}) (interface{}, error) {
 	return nil, errors.New("invalid integer attribute")
 }
 
-type attributeTime struct{}
+type attributeDate struct{}
 
-func (attributeTime) Decode(value Attribute) (interface{}, error) {
+func (attributeDate) Decode(value Attribute) (interface{}, error) {
 	if len(value) != 4 {
 		return nil, errors.New("time attribute has invalid size")
 	}
 	return time.Unix(int64(binary.BigEndian.Uint32(value)), 0), nil
 }
 
-func (attributeTime) Encode(value interface{}) (Attribute, error) {
+func (attributeDate) Encode(value interface{}) (Attribute, error) {
 	timestamp, ok := value.(time.Time)
 	if !ok {
 		return nil, errors.New("time attribute must be time.Time")

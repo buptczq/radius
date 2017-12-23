@@ -2,7 +2,9 @@ package radius
 
 import (
 	"bytes"
+	"net"
 	"testing"
+	"time"
 )
 
 func TestAttributeInteger(t *testing.T) {
@@ -160,6 +162,94 @@ func TestAttributeString(t *testing.T) {
 
 func TestAttributeString_Error(t *testing.T) {
 	_, err := Codecs[AttributeString].Decode([]byte{255, 0, 0, 255})
+	if err == nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAttributeAddress(t *testing.T) {
+	wired, err := Codecs[AttributeIPAddr].Encode(net.ParseIP("10.3.8.213"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(wired, []byte{10, 3, 8, 213}) {
+		t.Fail()
+	}
+	data, err := Codecs[AttributeIPAddr].Decode([]byte{1, 2, 3, 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data.(net.IP).String() != "1.2.3.4" {
+		t.Fail()
+	}
+}
+
+func TestAttributeAddress_Error(t *testing.T) {
+	_, err := Codecs[AttributeIPAddr].Encode([]byte{0, 0, 255})
+	if err == nil {
+		t.Fatal(err)
+	}
+	_, err = Codecs[AttributeIPAddr].Encode(net.ParseIP("2001::1"))
+	if err == nil {
+		t.Fatal(err)
+	}
+	_, err = Codecs[AttributeIPAddr].Decode([]byte{0, 0, 255})
+	if err == nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAttributeAddress6(t *testing.T) {
+	wired, err := Codecs[AttributeIPv6Addr].Encode(net.ParseIP("2001::1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(wired, []byte{32, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}) {
+		t.Fail()
+	}
+	data, err := Codecs[AttributeIPv6Addr].Decode([]byte{0x20, 0x01, 0x0d, 0xa8, 0x02, 0x15, 0x8f, 0x02, 0x4c, 0xc1, 0xf8, 0x72, 0xd6, 0xd0, 0x8e, 0x5c})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data.(net.IP).String() != "2001:da8:215:8f02:4cc1:f872:d6d0:8e5c" {
+		t.Fail()
+	}
+}
+
+func TestAttributeAddress6_Error(t *testing.T) {
+	_, err := Codecs[AttributeIPv6Addr].Encode([]byte{0, 0, 255})
+	if err == nil {
+		t.Fatal(err)
+	}
+	_, err = Codecs[AttributeIPv6Addr].Decode([]byte{0, 0, 255})
+	if err == nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAttributeDate(t *testing.T) {
+	wired, err := Codecs[AttributeDate].Encode(time.Unix(1514026068, 861))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(wired, []byte{90, 62, 52, 84}) {
+		t.Fail()
+	}
+	data, err := Codecs[AttributeDate].Decode([]byte{0x5a, 0x3e, 0x32, 0x95})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data.(time.Time).String() != "2017-12-23 18:40:21 +0800 CST" {
+		t.Fail()
+	}
+}
+
+func TestAttributeDate_Error(t *testing.T) {
+	_, err := Codecs[AttributeDate].Encode([]byte{0, 0, 255})
+	if err == nil {
+		t.Fatal(err)
+	}
+	_, err = Codecs[AttributeDate].Decode([]byte{0, 0, 255})
 	if err == nil {
 		t.Fatal(err)
 	}
