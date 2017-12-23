@@ -29,6 +29,7 @@ type Dictionary struct {
 	mu               sync.RWMutex
 	attributesByType map[AttributeKey]*DictEntry
 	attributesByName map[string]*DictEntry
+	attributesHasTag map[AttributeKey]bool
 }
 
 // RegisterEx registers the AttributeCodec for the given attribute options.
@@ -57,6 +58,12 @@ func (d *Dictionary) RegisterEx(name string, oid uint32, t byte, hasTag bool, en
 		d.attributesByName = make(map[string]*DictEntry)
 	}
 	d.attributesByName[name] = entry
+	if d.attributesHasTag == nil {
+		d.attributesHasTag = make(map[AttributeKey]bool)
+	}
+	if hasTag {
+		d.attributesHasTag[key] = true
+	}
 	d.mu.Unlock()
 	return nil
 }
@@ -89,7 +96,7 @@ func (d *Dictionary) MustRegister(name string, code byte, attrType AttributeType
 // if the given key is not registered.
 func (d *Dictionary) Get(key AttributeKey) (value *DictEntry, ok bool) {
 	d.mu.RLock()
-	entry := d.attributesByType[key]
+	entry := d.attributesByType[key.WithoutTag()]
 	d.mu.RUnlock()
 	if entry == nil {
 		return
@@ -117,7 +124,7 @@ func (d *Dictionary) GetByName(name string) (value *DictEntry, ok bool) {
 // if the given type is not registered.
 func (d *Dictionary) Name(key AttributeKey) (name string, ok bool) {
 	d.mu.RLock()
-	entry := d.attributesByType[key]
+	entry := d.attributesByType[key.WithoutTag()]
 	d.mu.RUnlock()
 	if entry == nil {
 		return
@@ -125,6 +132,16 @@ func (d *Dictionary) Name(key AttributeKey) (name string, ok bool) {
 	name = entry.Name
 	ok = true
 	return
+}
+
+// HasTag returns whether given attribute type has a tag
+func (d *Dictionary) HasTag(key AttributeKey) bool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if _, ok := d.attributesHasTag[key.WithoutTag()]; ok {
+		return true
+	}
+	return false
 }
 
 // Codec returns the codec for the given attribute.

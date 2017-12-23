@@ -9,11 +9,6 @@ import (
 	"strconv"
 )
 
-// Encodes AVPair into Vendor-Specific attribute format with tag (string)
-func EncodeAVpairTag(vendor_id uint32, type_id uint8, tag uint8, value string) (vsa []byte) {
-	return EncodeAVPairByteTag(vendor_id, type_id, tag, []byte(value))
-}
-
 // Encodes AVPair into Vendor-Specific attribute format (byte)
 func EncodeAVPairByte(vendor_id uint32, type_id uint8, value []byte) (vsa []byte) {
 	var b bytes.Buffer
@@ -150,4 +145,13 @@ func NewUserPassword(plaintext, secret, requestAuthenticator []byte) (Attribute,
 	}
 
 	return enc, nil
+}
+
+// Add a tag to value
+func AddTag(value []byte, tag byte) (vsa []byte) {
+	var b bytes.Buffer
+	b.WriteByte(tag)
+	b.Write(value)
+	vsa = b.Bytes()
+	return
 }

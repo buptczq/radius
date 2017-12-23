@@ -1,11 +1,11 @@
 package radius
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 )
 
-// TODO : support tag
 // TODO : support encrypt
 
 // If multiple Attributes with the same Type are present, the order of
@@ -44,18 +44,43 @@ func ParseAttributes(b []byte) (Attributes, error) {
 // Add appends the given Attribute to the map entry of the given type.
 func (a Attributes) AddRaw(key AttributeKey, value Attribute) {
 	oid := key.Vendor()
+	hasTag := Builtin.HasTag(key)
 	if oid == 0 {
-		a[key.Type()] = append(a[key.Type()], value)
+		if hasTag {
+			a[key.Type()] = append(a[key.Type()], AddTag(value, key.Tag()))
+		} else {
+			a[key.Type()] = append(a[key.Type()], value)
+		}
 	} else {
-		a[VENDOR_SPECIFIC] = append(a[VENDOR_SPECIFIC], EncodeAVPairByte(oid, key.Type(), value))
+		if hasTag {
+			a[VENDOR_SPECIFIC] = append(a[VENDOR_SPECIFIC], EncodeAVPairByteTag(oid, key.Type(), key.Tag(), value))
+		} else {
+			a[VENDOR_SPECIFIC] = append(a[VENDOR_SPECIFIC], EncodeAVPairByte(oid, key.Type(), value))
+		}
 	}
 }
 
 // Del removes all Attributes of the given type from a.
 func (a Attributes) Del(key AttributeKey) {
 	oid := key.Vendor()
+	hasTag := Builtin.HasTag(key)
 	if oid == 0 {
-		delete(a, key.Type())
+		if hasTag && key.Tag() != 0 {
+			old := a[key.Type()]
+			if old == nil {
+				return
+			}
+			newAttrs := make([]Attribute, 0)
+			for _, data := range old {
+				if len(data) == 0 || data[0] != key.Tag() {
+					newAttrs = append(newAttrs, data)
+				}
+			}
+			a[key.Type()] = newAttrs
+		} else {
+			// tag == 0, delete all attributes
+			delete(a, key.Type())
+		}
 	} else {
 		old := a[VENDOR_SPECIFIC]
 		if old == nil {
@@ -63,9 +88,22 @@ func (a Attributes) Del(key AttributeKey) {
 		}
 		newAttrs := make([]Attribute, 0)
 		for _, vsa := range old {
-			oid, t, _, _ := DecodeAVPairByte(vsa)
-			if MakeAttributeKey(oid, 0, t) != key {
-				newAttrs = append(newAttrs, vsa)
+			oid, t, data, err := DecodeAVPairByte(vsa)
+			if err != nil {
+				// ignore malformation
+				continue
+			}
+			if hasTag && key.Tag() != 0 {
+				if len(data) > 0 {
+					if MakeAttributeKey(oid, data[0], t) != key {
+						newAttrs = append(newAttrs, vsa)
+					}
+				}
+			} else {
+				// ignore tag
+				if MakeAttributeKey(oid, 0, t) != key.WithoutTag() {
+					newAttrs = append(newAttrs, vsa)
+				}
 			}
 		}
 		a[VENDOR_SPECIFIC] = newAttrs
@@ -76,12 +114,21 @@ func (a Attributes) Del(key AttributeKey) {
 // no Attribute of Type key exists in a.
 func (a Attributes) LookupRaw(key AttributeKey) (Attribute, bool) {
 	oid := key.Vendor()
+	hasTag := Builtin.HasTag(key)
 	if oid == 0 {
 		m := a[key.Type()]
 		if len(m) == 0 {
 			return nil, false
 		}
-		return m[0], true
+		if hasTag && key.Tag() != 0 {
+			for _, data := range m {
+				if len(data) > 0 && data[0] == key.Tag() {
+					return data, true
+				}
+			}
+		} else {
+			return m[0], true
+		}
 	} else {
 		attrs := a[VENDOR_SPECIFIC]
 		if attrs == nil {
@@ -92,8 +139,15 @@ func (a Attributes) LookupRaw(key AttributeKey) (Attribute, bool) {
 			if err != nil {
 				return nil, false
 			}
-			if MakeAttributeKey(oid, 0, t) == key {
-				return data, true
+			if hasTag && key.Tag() != 0 {
+				if len(data) > 0 && data[0] == key.Tag() {
+					return data, true
+				}
+			} else {
+				// ignore tag
+				if MakeAttributeKey(oid, 0, t) == key.WithoutTag() {
+					return data, true
+				}
 			}
 		}
 	}
@@ -109,13 +163,8 @@ func (a Attributes) GetRaw(key AttributeKey) Attribute {
 
 // Set removes all Attributes of Type key and appends value.
 func (a Attributes) SetRaw(key AttributeKey, value Attribute) {
-	oid := key.Vendor()
-	if oid == 0 {
-		a[key.Type()] = []Attribute{value}
-	} else {
-		a.Del(key)
-		a.AddRaw(key, value)
-	}
+	a.Del(key)
+	a.AddRaw(key, value)
 }
 
 // Len returns the total number of Attributes in a.
@@ -174,13 +223,19 @@ func (a Attributes) Set(key AttributeKey, value interface{}) error {
 	if err != nil {
 		return err
 	}
-	a.SetRaw(entry.Key, attr)
+	a.SetRaw(key, attr)
 	return nil
 }
 
 // SetByName sets the value of the first attribute whose dictionary name matches the
 // given name. If no such attribute exists, a new attribute is added
 func (a Attributes) SetByName(name string, value interface{}) error {
+	return a.SetByNameWithTag(name, 0, value)
+}
+
+// SetByNameWithTag sets the value of the first attribute whose dictionary name matches the
+// given name with a tag. If no such attribute exists, a new attribute is added
+func (a Attributes) SetByNameWithTag(name string, tag byte, value interface{}) error {
 	entry, ok := Builtin.GetByName(name)
 	if !ok {
 		return fmt.Errorf("can't find attribute %s", name)
@@ -197,7 +252,7 @@ func (a Attributes) SetByName(name string, value interface{}) error {
 	if err != nil {
 		return err
 	}
-	a.SetRaw(entry.Key, attr)
+	a.SetRaw(entry.Key.WithTag(tag), attr)
 	return nil
 }
 
@@ -209,27 +264,39 @@ func (a Attributes) Get(key AttributeKey) interface{} {
 		return fmt.Errorf("can't find attribute %s", key)
 	}
 	if data, ok := a.LookupRaw(key); ok {
-		if v, err := entry.Codec().Decode(data); err == nil {
-			return v
+		if entry.HasTag {
+			if len(data) == 0 {
+				return nil
+			}
+			if v, err := entry.Codec().Decode(data[1:]); err == nil {
+				return v
+			}
+		} else {
+			if v, err := entry.Codec().Decode(data); err == nil {
+				return v
+			}
 		}
 	}
 	return nil
 }
 
-// GetByName returns the value of the first attribute whose dictionary name matches
-// the given name. nil is returned if no such attribute exists.
-func (a Attributes) GetByName(name string) interface{} {
+// GetByNameWithTag returns the value of the first attribute whose dictionary name matches
+// the given name with a tag. nil is returned if no such attribute exists.
+func (a Attributes) GetByNameWithTag(name string, tag byte) interface{} {
 	entry, ok := Builtin.GetByName(name)
 	if !ok {
 		return nil
 	}
-	attr := a.GetRaw(entry.Key)
-	if v, err := entry.Codec().Decode(attr); err == nil {
-		return v
-	}
-	return nil
+	return a.Get(entry.Key.WithTag(tag))
 }
 
+// GetByName returns the value of the first attribute whose dictionary name matches
+// the given name. nil is returned if no such attribute exists.
+func (a Attributes) GetByName(name string) interface{} {
+	return a.GetByNameWithTag(name, 0)
+}
+
+// GetString is a helper for get a formatted string from given attribute.
 func (a Attributes) GetString(key AttributeKey) string {
 	value := a.Get(key)
 	if value == nil {
@@ -237,7 +304,16 @@ func (a Attributes) GetString(key AttributeKey) string {
 	}
 	switch v := value.(type) {
 	case []byte:
-		return string(v)
+		// FreeRADIUS style
+		var b bytes.Buffer
+		if len(v) == 0 {
+			return ""
+		}
+		b.WriteString("0x")
+		for _, x := range v {
+			b.WriteString(fmt.Sprintf("%02X", x))
+		}
+		return b.String()
 	default:
 		return fmt.Sprintf("%v", v)
 	}
