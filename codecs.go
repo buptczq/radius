@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net"
+	"reflect"
 	"strconv"
 	"time"
 	"unicode/utf8"
@@ -17,6 +18,7 @@ const (
 	AttributeIPAddr
 	AttributeDate
 	AttributeInteger
+	AttributeSigned
 	AttributeIPv6Addr
 	AttributeIPv6Prefix
 	AttributeIFID
@@ -39,6 +41,8 @@ func (t AttributeType) String() string {
 		return "date"
 	case AttributeInteger:
 		return "integer"
+	case AttributeSigned:
+		return "signed"
 	case AttributeIPv6Addr:
 		return "ipv6addr"
 	case AttributeIPv6Prefix:
@@ -59,11 +63,12 @@ var Codecs map[AttributeType]AttributeCodec
 
 func init() {
 	Codecs = make(map[AttributeType]AttributeCodec)
-	Codecs[AttributeString] = attributeText{}
+	Codecs[AttributeString] = attributeString{}
 	Codecs[AttributeOctets] = attributeOctets{}
 	Codecs[AttributeIPAddr] = attributeAddress{}
 	Codecs[AttributeDate] = attributeTime{}
 	Codecs[AttributeInteger] = attributeInteger{}
+	Codecs[AttributeSigned] = attributeSigned{}
 	Codecs[AttributeIPv6Addr] = attributeAddress6{}
 	// TODO: ipv6 prefix
 	Codecs[AttributeIPv6Prefix] = attributeOctets{}
@@ -73,16 +78,16 @@ func init() {
 	Codecs[AttributeUnknown] = attributeOctets{}
 }
 
-type attributeText struct{}
+type attributeString struct{}
 
-func (attributeText) Decode(value Attribute) (interface{}, error) {
+func (attributeString) Decode(value Attribute) (interface{}, error) {
 	if !utf8.Valid(value) {
-		return nil, errors.New("radius: text attribute is not valid UTF-8")
+		return nil, errors.New("text attribute is not valid UTF-8")
 	}
 	return string(value), nil
 }
 
-func (attributeText) Encode(value interface{}) (Attribute, error) {
+func (attributeString) Encode(value interface{}) (Attribute, error) {
 	str, ok := value.(string)
 	if ok {
 		return Attribute(str), nil
@@ -91,7 +96,7 @@ func (attributeText) Encode(value interface{}) (Attribute, error) {
 	if ok {
 		return raw, nil
 	}
-	return nil, errors.New("radius: text attribute must be string or []byte")
+	return nil, errors.New("text attribute must be string or []byte")
 }
 
 type attributeOctets struct{}
@@ -111,14 +116,18 @@ func (attributeOctets) Encode(value interface{}) (Attribute, error) {
 	if ok {
 		return Attribute(str), nil
 	}
-	return nil, errors.New("radius: string attribute must be Attribute or string")
+	data, ok := value.([]byte)
+	if ok {
+		return Attribute(data), nil
+	}
+	return nil, errors.New("string attribute must be Attribute or string")
 }
 
 type attributeAddress struct{}
 
 func (attributeAddress) Decode(value Attribute) (interface{}, error) {
 	if len(value) != net.IPv4len {
-		return nil, errors.New("radius: address attribute has invalid size")
+		return nil, errors.New("address attribute has invalid size")
 	}
 	v := make(Attribute, len(value))
 	copy(v, value)
@@ -128,11 +137,11 @@ func (attributeAddress) Decode(value Attribute) (interface{}, error) {
 func (attributeAddress) Encode(value interface{}) (Attribute, error) {
 	ip, ok := value.(net.IP)
 	if !ok {
-		return nil, errors.New("radius: address attribute must be net.IP")
+		return nil, errors.New("address attribute must be net.IP")
 	}
 	ip = ip.To4()
 	if ip == nil {
-		return nil, errors.New("radius: address attribute must be an IPv4 net.IP")
+		return nil, errors.New("address attribute must be an IPv4 net.IP")
 	}
 	return Attribute(ip), nil
 }
@@ -141,7 +150,7 @@ type attributeAddress6 struct{}
 
 func (attributeAddress6) Decode(value Attribute) (interface{}, error) {
 	if len(value) != net.IPv6len {
-		return nil, errors.New("radius: address attribute has invalid size")
+		return nil, errors.New("address attribute has invalid size")
 	}
 	v := make(Attribute, len(value))
 	copy(v, value)
@@ -151,11 +160,11 @@ func (attributeAddress6) Decode(value Attribute) (interface{}, error) {
 func (attributeAddress6) Encode(value interface{}) (Attribute, error) {
 	ip, ok := value.(net.IP)
 	if !ok {
-		return nil, errors.New("radius: address attribute must be net.IP")
+		return nil, errors.New("address attribute must be net.IP")
 	}
 	ip = ip.To16()
 	if ip == nil {
-		return nil, errors.New("radius: address attribute must be an IPv6 net.IP")
+		return nil, errors.New("address attribute must be an IPv6 net.IP")
 	}
 	return Attribute(ip), nil
 }
@@ -164,7 +173,7 @@ type attributeSigned struct{}
 
 func (attributeSigned) Decode(value Attribute) (interface{}, error) {
 	if len(value) != 4 {
-		return nil, errors.New("radius: signed attribute has invalid size")
+		return nil, errors.New("signed attribute has invalid size")
 	}
 	return int32(binary.BigEndian.Uint32(value)), nil
 }
@@ -172,18 +181,30 @@ func (attributeSigned) Decode(value Attribute) (interface{}, error) {
 func (attributeSigned) Encode(value interface{}) (Attribute, error) {
 	integer, ok := value.(int32)
 	if !ok {
-		return nil, errors.New("radius: signed attribute must be int32")
+		return nil, errors.New("signed attribute must be int32")
 	}
 	raw := make(Attribute, 4)
 	binary.BigEndian.PutUint32(raw, (uint32)(integer))
 	return raw, nil
 }
 
+func (attributeSigned) Transform(value interface{}) (interface{}, error) {
+	switch t := value.(type) {
+	case int, int8, int16, int32, int64:
+		a := reflect.ValueOf(t).Int() // a has type int64
+		return int32(a), nil
+	case uint, uint8, uint16, uint32, uint64:
+		a := reflect.ValueOf(t).Uint() // a has type uint64
+		return int32(a), nil
+	}
+	return nil, errors.New("invalid integer attribute")
+}
+
 type attributeInteger struct{}
 
 func (attributeInteger) Decode(value Attribute) (interface{}, error) {
 	if len(value) != 4 {
-		return nil, errors.New("radius: integer attribute has invalid size")
+		return nil, errors.New("integer attribute has invalid size")
 	}
 	return binary.BigEndian.Uint32(value), nil
 }
@@ -191,18 +212,30 @@ func (attributeInteger) Decode(value Attribute) (interface{}, error) {
 func (attributeInteger) Encode(value interface{}) (Attribute, error) {
 	integer, ok := value.(uint32)
 	if !ok {
-		return nil, errors.New("radius: integer attribute must be uint32")
+		return nil, errors.New("integer attribute must be uint32")
 	}
 	raw := make(Attribute, 4)
 	binary.BigEndian.PutUint32(raw, integer)
 	return raw, nil
 }
 
+func (attributeInteger) Transform(value interface{}) (interface{}, error) {
+	switch t := value.(type) {
+	case int, int8, int16, int32, int64:
+		a := reflect.ValueOf(t).Int() // a has type int64
+		return uint32(a), nil
+	case uint, uint8, uint16, uint32, uint64:
+		a := reflect.ValueOf(t).Uint() // a has type uint64
+		return uint32(a), nil
+	}
+	return nil, errors.New("invalid integer attribute")
+}
+
 type attributeInteger64 struct{}
 
 func (attributeInteger64) Decode(value Attribute) (interface{}, error) {
 	if len(value) != 8 {
-		return nil, errors.New("radius: integer64 attribute has invalid size")
+		return nil, errors.New("integer64 attribute has invalid size")
 	}
 	return binary.BigEndian.Uint64(value), nil
 }
@@ -210,18 +243,30 @@ func (attributeInteger64) Decode(value Attribute) (interface{}, error) {
 func (attributeInteger64) Encode(value interface{}) (Attribute, error) {
 	integer, ok := value.(uint64)
 	if !ok {
-		return nil, errors.New("radius: integer64 attribute must be uint64")
+		return nil, errors.New("integer64 attribute must be uint64")
 	}
 	raw := make(Attribute, 8)
 	binary.BigEndian.PutUint64(raw, integer)
 	return raw, nil
 }
 
+func (attributeInteger64) Transform(value interface{}) (interface{}, error) {
+	switch t := value.(type) {
+	case int, int8, int16, int32, int64:
+		a := reflect.ValueOf(t).Int() // a has type int64
+		return uint64(a), nil
+	case uint, uint8, uint16, uint32, uint64:
+		a := reflect.ValueOf(t).Uint() // a has type uint64
+		return uint64(a), nil
+	}
+	return nil, errors.New("invalid integer attribute")
+}
+
 type attributeTime struct{}
 
 func (attributeTime) Decode(value Attribute) (interface{}, error) {
 	if len(value) != 4 {
-		return nil, errors.New("radius: time attribute has invalid size")
+		return nil, errors.New("time attribute has invalid size")
 	}
 	return time.Unix(int64(binary.BigEndian.Uint32(value)), 0), nil
 }
@@ -229,7 +274,7 @@ func (attributeTime) Decode(value Attribute) (interface{}, error) {
 func (attributeTime) Encode(value interface{}) (Attribute, error) {
 	timestamp, ok := value.(time.Time)
 	if !ok {
-		return nil, errors.New("radius: time attribute must be time.Time")
+		return nil, errors.New("time attribute must be time.Time")
 	}
 	raw := make(Attribute, 4)
 	binary.BigEndian.PutUint32(raw, uint32(timestamp.Unix()))

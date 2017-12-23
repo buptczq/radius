@@ -1,7 +1,44 @@
 package radius
 
+import "fmt"
+
 // Attribute is a RADIUS attribute, which is part of a RADIUS packet.
 type Attribute []byte
+
+// AttributeKey represents a attribute key
+// AttributeKey = VENDOR << 32 | TAG << 8 | Type
+type AttributeKey uint64
+
+// golang 1.9
+//type AttrVendorId = uint32
+//type AttrTag = byte
+//type AttrType = byte
+
+const (
+	VENDOR_MASK uint64 = 0xFFFFFFFF << 32
+	TAG_MASK    uint64 = 0xFF << 8
+	TYPE_MASK   uint64 = 0xFF
+)
+
+func (k AttributeKey) Vendor() uint32 {
+	return uint32((uint64(k) & VENDOR_MASK) >> 32)
+}
+
+func (k AttributeKey) Tag() byte {
+	return byte((uint64(k) & TAG_MASK) >> 8)
+}
+
+func (k AttributeKey) Type() byte {
+	return byte(uint64(k) & TYPE_MASK)
+}
+
+func (k AttributeKey) String() string {
+	return fmt.Sprintf("(Vendor = %d, Type = %d, Tag = %d)", k.Vendor(), k.Type(), k.Tag())
+}
+
+func MakeAttributeKey(oid uint32, tag byte, attrType byte) AttributeKey {
+	return AttributeKey(uint64(oid)<<32 | uint64(tag)<<8 | uint64(attrType))
+}
 
 // AttributeCodec defines how an Attribute is encoded and decoded to and from
 // wire data.

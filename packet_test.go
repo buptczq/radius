@@ -33,17 +33,17 @@ func Test_RFC2865_7_1(t *testing.T) {
 	if p.Len() != 4 {
 		t.Fatal("expecting 4 attributes")
 	}
-	if p.Value("User-Name").(string) != "nemo" {
+	if p.GetByName("User-Name").(string) != "nemo" {
 		t.Fatal("expecting User-Name = nemo")
 	}
 	password, _ := radius.UserPassword(p.GetRaw(2), p.Secret, p.Authenticator[:])
 	if string(password) != "arctangent" {
 		t.Fatal("expecting User-Password = arctangent")
 	}
-	if !p.Value("NAS-IP-Address").(net.IP).Equal(net.ParseIP("192.168.1.16")) {
+	if !p.GetByName("NAS-IP-Address").(net.IP).Equal(net.ParseIP("192.168.1.16")) {
 		t.Fatal("expecting NAS-IP-Address = 192.168.1.16")
 	}
-	if p.Value("NAS-Port").(uint32) != 3 {
+	if p.GetByName("NAS-Port").(uint32) != 3 {
 		t.Fatal("expecting NAS-Port = 3")
 	}
 
@@ -100,9 +100,9 @@ func RADIUSPacketsEqual(a, b []byte) bool {
 
 func Test_Vendor_Encode(t *testing.T) {
 	// Aruba
-	radius.Builtin.RegisterVendor("Aruba-Essid-Name", 14823, 5, radius.AttributeString)
+	radius.Builtin.RegisterEx("Aruba-Essid-Name", 14823, 5, false, 0, radius.AttributeString)
 	p := radius.New(radius.CodeAccessRequest, []byte("123"))
-	p.Set("Aruba-Essid-Name", "wireless")
+	p.SetByName("Aruba-Essid-Name", "wireless")
 	wired, err := p.Encode()
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +114,7 @@ func Test_Vendor_Encode(t *testing.T) {
 	if p.Code != radius.CodeAccessRequest {
 		t.Fatal("expecting Code = PacketCodeAccessRequest")
 	}
-	if p.Value("Aruba-Essid-Name").(string) != "wireless" {
+	if p.GetByName("Aruba-Essid-Name").(string) != "wireless" {
 		t.Fatal("expecting Aruba-Essid-Name = wireless")
 	}
 }

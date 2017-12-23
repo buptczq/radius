@@ -58,7 +58,7 @@ func DecodeAVPairByte(vsa []byte) (vendor_id uint32, type_id uint8, value []byte
 		return
 	}
 
-	vendor_id = binary.BigEndian.Uint32([]byte{vsa[0], vsa[1], vsa[2], vsa[3]})
+	vendor_id = binary.BigEndian.Uint32(vsa[0:4])
 	type_id = uint8(vsa[4])
 	value = vsa[6:]
 	return

@@ -39,9 +39,6 @@ type PacketServer struct {
 	// This should only be set to true for debugging purposes.
 	InsecureSkipVerify bool
 
-	// Dictionary used when decoding incoming packets.
-	Dictionary *Dictionary
-
 	mu           sync.Mutex
 	shuttingDown bool
 	ctx          context.Context
@@ -70,8 +67,8 @@ func (s *PacketServer) Serve(conn net.PacketConn) error {
 	var ctx context.Context
 	if s.ctx == nil {
 		s.ctx, s.ctxDone = context.WithCancel(context.Background())
-		ctx = s.ctx
 	}
+	ctx = s.ctx
 	if s.running == nil {
 		s.running = make(chan struct{})
 	}

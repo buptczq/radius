@@ -23,9 +23,8 @@ func TestPacketServer_basic(t *testing.T) {
 
 	server := radius.PacketServer{
 		SecretSource: radius.StaticSecretSource(secret),
-		Dictionary:   radius.Builtin,
 		Handler: radius.HandlerFunc(func(w radius.ResponseWriter, r *radius.Request) {
-			username := r.Packet.Value("User-Name").(string)
+			username := r.Packet.GetByName("User-Name").(string)
 			if username == "tim" {
 				w.Write(r.Response(radius.CodeAccessAccept))
 			} else {
@@ -39,7 +38,7 @@ func TestPacketServer_basic(t *testing.T) {
 		defer server.Shutdown(context.Background())
 
 		packet := radius.New(radius.CodeAccessRequest, secret)
-		packet.Set("User-Name", "tim")
+		packet.SetByName("User-Name", "tim")
 		client := radius.Client{
 			Retry: time.Millisecond * 50,
 		}
