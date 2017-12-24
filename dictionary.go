@@ -32,8 +32,8 @@ type Dictionary struct {
 	attributesHasTag map[AttributeKey]bool
 }
 
-// RegisterEx registers the AttributeCodec for the given attribute options.
-func (d *Dictionary) RegisterEx(name string, oid uint32, t byte, hasTag bool, encrypt int, attrType AttributeType) error {
+// RegisterEx registers the AttributeCodecs for the given attribute options.
+func (d *Dictionary) Register(name string, oid uint32, t byte, hasTag bool, encrypt int, attrType AttributeType) error {
 	if encrypt > 3 || encrypt < 0 {
 		return errors.New("illegal attribute encryption")
 	}
@@ -68,28 +68,11 @@ func (d *Dictionary) RegisterEx(name string, oid uint32, t byte, hasTag bool, en
 	return nil
 }
 
-// Register registers the AttributeCodec for the given attribute name and type.
-func (d *Dictionary) Register(name string, code byte, attrType AttributeType) error {
-	return d.RegisterEx(name, 0, code, false, 0, attrType)
-}
-
-// MustRegisterVendor is a helper for Register that panics if it returns an error.
-func (d *Dictionary) MustRegisterVendor(name string, oid uint32, code byte, attrType AttributeType) {
-	if err := d.RegisterEx(name, oid, code, false, 0, attrType); err != nil {
-		panic(err)
-	}
-}
-
 // MustRegisterEx is a helper for Register that panics if it returns an error.
-func (d *Dictionary) MustRegisterEx(name string, oid uint32, code byte, hasTag bool, encrypt int, attrType AttributeType) {
-	if err := d.RegisterEx(name, oid, code, hasTag, encrypt, attrType); err != nil {
+func (d *Dictionary) MustRegister(name string, oid uint32, code byte, hasTag bool, encrypt int, attrType AttributeType) {
+	if err := d.Register(name, oid, code, hasTag, encrypt, attrType); err != nil {
 		panic(err)
 	}
-}
-
-// MustRegister is a helper for Register that panics if it returns an error.
-func (d *Dictionary) MustRegister(name string, code byte, attrType AttributeType) {
-	d.MustRegisterVendor(name, 0, code, attrType)
 }
 
 // Get returns the registered entry for the given attribute key. ok is false
@@ -120,7 +103,7 @@ func (d *Dictionary) GetByName(name string) (value *DictEntry, ok bool) {
 	return
 }
 
-// Name returns the registered name for the given attribute type. ok is false
+// Name returns the registered name for the given attribute key. ok is false
 // if the given type is not registered.
 func (d *Dictionary) Name(key AttributeKey) (name string, ok bool) {
 	d.mu.RLock()
@@ -134,7 +117,7 @@ func (d *Dictionary) Name(key AttributeKey) (name string, ok bool) {
 	return
 }
 
-// HasTag returns whether given attribute type has a tag
+// HasTag returns whether the given attribute's type has a tag
 func (d *Dictionary) HasTag(key AttributeKey) bool {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -144,10 +127,10 @@ func (d *Dictionary) HasTag(key AttributeKey) bool {
 	return false
 }
 
-// Codec returns the codec for the given attribute.
-func (d *DictEntry) Codec() AttributeCodec {
-	if codec, ok := Codecs[d.AttrType]; ok {
-		return codec
+// Codecs returns the codecs for the given attribute.
+func (d *DictEntry) Codecs() AttributeCodec {
+	if codecs, ok := Codecs[d.AttrType]; ok {
+		return codecs
 	} else {
 		return Codecs[AttributeUnknown]
 	}

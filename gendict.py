@@ -1,7 +1,6 @@
 from pyrad import dictionary
+from pyrad import tools
 import os
-
-
 
 attrMap = {
     "string"     : "AttributeString",
@@ -17,8 +16,7 @@ attrMap = {
     "integer64"  : "AttributeInteger64",
 }
 
-
-tmpl = '''Builtin.MustRegisterEx("{name}", {oid}, {code}, {tag}, {encrypt}, {type})'''
+tmpl = '''Builtin.MustRegister("{name}", {oid}, {code}, {tag}, {encrypt}, {type})'''
 
 output = []
 const_attr = []
@@ -45,9 +43,10 @@ for k in d.attributes:
     oid = d.vendors[attr.vendor]
     key = makeKey(oid, attr.code)
 
-    # if attr.type == 'integer':
-        # for vname, value in attr.values.forward.items():
-            # print vname, value.encode('hex')
+    if attr.type == 'integer':
+        for vname, value in attr.values.forward.items():
+            newName = attr.name.replace('-','') + '_' + vname.replace('-','').replace('.','')
+            const_value.append(( key, tools.DecodeInteger(value), newName))
 
     newName = 'Attr' + attr.name.replace('-','')
     output.append((key, tmpl.format(
@@ -62,6 +61,7 @@ for k in d.attributes:
 
 output = sorted(output, key=lambda x:x[0])
 const_vendor = sorted(const_vendor, key=lambda x:x[0])
+const_value = sorted(const_value, key=lambda x:(x[0],x[1]))
 print "package radius\n\n"
 print "const ("
 for i in output:
@@ -69,6 +69,8 @@ for i in output:
         print '\t',i[2]
 for i in const_vendor:
     print '\tVendor%s uint32 = %s' % (i[1].replace('-', ''), i[0])
+for i in const_value:
+    print '\t%s uint32 = %s' % (i[2], i[1])
 print ")\n"
 
 print "func init() {"

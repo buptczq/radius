@@ -42,7 +42,15 @@ func (k AttributeKey) WithoutTag() AttributeKey {
 }
 
 func (k AttributeKey) String() string {
-	return fmt.Sprintf("(Vendor = %d, Type = %d, Tag = %d)", k.Vendor(), k.Type(), k.Tag())
+	if name, ok := Builtin.Name(k); ok {
+		if Builtin.HasTag(k) {
+			return fmt.Sprintf("%s:%d", name, k.Tag())
+		} else {
+			return name
+		}
+	} else {
+		return fmt.Sprintf("(Vendor = %d, Type = %d, Tag = %d)", k.Vendor(), k.Type(), k.Tag())
+	}
 }
 
 func MakeAttributeKey(oid uint32, tag byte, attrType byte) AttributeKey {

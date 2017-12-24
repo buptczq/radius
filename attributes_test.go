@@ -130,7 +130,7 @@ func TestAttributes_Tag(t *testing.T) {
 }
 
 func TestAttributes_AVPTag(t *testing.T) {
-	Builtin.RegisterEx("Alc-Tunnel-Max-Sessions", 6527, 48, true, 0, AttributeInteger)
+	Builtin.Register("Alc-Tunnel-Max-Sessions", 6527, 48, true, 0, AttributeInteger)
 	key := MakeAttributeKey(6527, 0, 48)
 	attr := make(Attributes)
 	attr.AddRaw(key.WithTag(1), []byte{66})
@@ -166,7 +166,7 @@ func TestAttributes_Tag_2(t *testing.T) {
 }
 
 func TestAttributes_AVPTag_2(t *testing.T) {
-	Builtin.RegisterEx("Alc-Tunnel-Max-Sessions", 6527, 48, true, 0, AttributeInteger)
+	Builtin.Register("Alc-Tunnel-Max-Sessions", 6527, 48, true, 0, AttributeInteger)
 	key := MakeAttributeKey(6527, 0, 48)
 	attr := make(Attributes)
 	attr.Set(key.WithTag(1), 1)

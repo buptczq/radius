@@ -19,6 +19,12 @@ func TestMakeAttributeKey(t *testing.T) {
 	if fmt.Sprint(key) != "(Vendor = 334324, Type = 16, Tag = 9)" {
 		t.Fatal(key)
 	}
+	if AttrUserName.String() != "User-Name" {
+		t.Fatal(AttrUserName)
+	}
+	if AttrTunnelPrivateGroupId.WithTag(1).String() != "Tunnel-Private-Group-Id:1" {
+		t.Fail()
+	}
 }
 
 func TestAttributeKey_WithTag(t *testing.T) {

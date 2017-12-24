@@ -36,6 +36,9 @@ func Test_RFC2865_7_1(t *testing.T) {
 	if p.GetByName("User-Name").(string) != "nemo" {
 		t.Fatal("expecting User-Name = nemo")
 	}
+	if p.Get(radius.AttrUserName).(string) != "nemo" {
+		t.Fatal("expecting User-Name = nemo")
+	}
 	password, _ := radius.UserPassword(p.GetRaw(2), p.Secret, p.Authenticator[:])
 	if string(password) != "arctangent" {
 		t.Fatal("expecting User-Password = arctangent")
@@ -100,7 +103,7 @@ func RADIUSPacketsEqual(a, b []byte) bool {
 
 func Test_Vendor_Encode(t *testing.T) {
 	// Aruba
-	radius.Builtin.RegisterEx("Aruba-Essid-Name", 14823, 5, false, 0, radius.AttributeString)
+	radius.Builtin.Register("Aruba-Essid-Name", 14823, 5, false, 0, radius.AttributeString)
 	p := radius.New(radius.CodeAccessRequest, []byte("123"))
 	p.SetByName("Aruba-Essid-Name", "wireless")
 	wired, err := p.Encode()
