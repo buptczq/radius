@@ -141,7 +141,7 @@ func IsAuthenticRequest(request, secret []byte) bool {
 	}
 
 	switch Code(request[0]) {
-	case CodeAccessRequest:
+	case CodeAccessRequest, CodeStatusServer:
 		return true
 	case CodeAccountingRequest, CodeDisconnectRequest, CodeCoARequest:
 		hash := md5.New()
