@@ -23,19 +23,28 @@ type DictEntry struct {
 	AttrType AttributeType
 }
 
+const (
+	TAG_NONE    = 0
+	TAG_INTERGE = 1
+	TAG_STRING  = 2
+)
+
 // Dictionary stores mappings between attribute names and types and
 // AttributeCodecs.
 type Dictionary struct {
 	mu               sync.RWMutex
 	attributesByType map[AttributeKey]*DictEntry
 	attributesByName map[string]*DictEntry
-	attributesHasTag map[AttributeKey]bool
+	attributesHasTag map[AttributeKey]int
 }
 
 // RegisterEx registers the AttributeCodecs for the given attribute options.
 func (d *Dictionary) Register(name string, oid uint32, t byte, hasTag bool, encrypt int, attrType AttributeType) error {
 	if encrypt > 3 || encrypt < 0 {
 		return errors.New("illegal attribute encryption")
+	}
+	if hasTag && !(attrType == AttributeString || attrType == AttributeInteger) {
+		return errors.New("only string and integer can have tags")
 	}
 	key := MakeAttributeKey(oid, 0, t)
 	d.mu.Lock()
@@ -59,10 +68,14 @@ func (d *Dictionary) Register(name string, oid uint32, t byte, hasTag bool, encr
 	}
 	d.attributesByName[name] = entry
 	if d.attributesHasTag == nil {
-		d.attributesHasTag = make(map[AttributeKey]bool)
+		d.attributesHasTag = make(map[AttributeKey]int)
 	}
 	if hasTag {
-		d.attributesHasTag[key] = true
+		if attrType == AttributeInteger {
+			d.attributesHasTag[key] = TAG_INTERGE
+		} else if attrType == AttributeString {
+			d.attributesHasTag[key] = TAG_STRING
+		}
 	}
 	d.mu.Unlock()
 	return nil
@@ -118,13 +131,13 @@ func (d *Dictionary) Name(key AttributeKey) (name string, ok bool) {
 }
 
 // HasTag returns whether the given attribute's type has a tag
-func (d *Dictionary) HasTag(key AttributeKey) bool {
+func (d *Dictionary) TagType(key AttributeKey) int {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
-	if _, ok := d.attributesHasTag[key.WithoutTag()]; ok {
-		return true
+	if v, ok := d.attributesHasTag[key.WithoutTag()]; ok {
+		return v
 	}
-	return false
+	return TAG_NONE
 }
 
 // Codecs returns the codecs for the given attribute.

@@ -41,9 +41,17 @@ func (k AttributeKey) WithoutTag() AttributeKey {
 	return AttributeKey(uint64(k) & ^TAG_MASK)
 }
 
+func (k AttributeKey) ValidTag() bool {
+	//The Tag field is one octet in length and is intended to provide a
+	//means of grouping attributes in the same packet which refer to the
+	//same tunnel.  Valid values for this field are 0x01 through 0x1F,
+	//inclusive.  If the Tag field is unused, it MUST be zero (0x00).
+	return k.Tag() > 0 && k.Tag() < 0x20
+}
+
 func (k AttributeKey) String() string {
 	if name, ok := Builtin.Name(k); ok {
-		if Builtin.HasTag(k) {
+		if Builtin.TagType(k) > 0 {
 			return fmt.Sprintf("%s:%d", name, k.Tag())
 		} else {
 			return name

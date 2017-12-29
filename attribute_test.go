@@ -35,10 +35,25 @@ func TestAttributeKey_WithTag(t *testing.T) {
 	}
 }
 
-func TestAttributeKey_WithoutTagTag(t *testing.T) {
+func TestAttributeKey_WithoutTag(t *testing.T) {
 	key := MakeAttributeKey(334324, 9, 16)
 	newKey := key.WithoutTag()
 	if newKey.Tag() != 0 || newKey.Type() != 16 || newKey.Vendor() != 334324 {
+		t.Fail()
+	}
+}
+func TestAttributeKey_ValidTag(t *testing.T) {
+	key := MakeAttributeKey(334324, 9, 16)
+	if !key.ValidTag() {
+		t.Fail()
+	}
+	if key.WithTag(0).ValidTag() {
+		t.Fail()
+	}
+	if !key.WithTag(0x1F).ValidTag() {
+		t.Fail()
+	}
+	if key.WithTag(0x20).ValidTag() {
 		t.Fail()
 	}
 }

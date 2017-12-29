@@ -44,18 +44,40 @@ func ParseAttributes(b []byte) (Attributes, error) {
 // AddRaw appends the given Attribute to the map entry of the given key.
 func (a Attributes) AddRaw(key AttributeKey, value Attribute) {
 	oid := key.Vendor()
-	hasTag := Builtin.HasTag(key)
+	tagType := Builtin.TagType(key)
 	if oid == 0 {
-		if hasTag {
-			a[key.Type()] = append(a[key.Type()], AddTag(value, key.Tag()))
-		} else {
+		switch tagType {
+		case TAG_NONE:
 			a[key.Type()] = append(a[key.Type()], value)
+		case TAG_STRING:
+			if key.ValidTag() {
+				a[key.Type()] = append(a[key.Type()], AddTag(value, key.Tag()))
+			} else {
+				a[key.Type()] = append(a[key.Type()], value)
+			}
+		case TAG_INTERGE:
+			if key.ValidTag() {
+				a[key.Type()] = append(a[key.Type()], AddTag(value, key.Tag()))
+			} else {
+				a[key.Type()] = append(a[key.Type()], AddTag(value, 0))
+			}
 		}
 	} else {
-		if hasTag {
-			a[VENDOR_SPECIFIC] = append(a[VENDOR_SPECIFIC], EncodeAVPairByteTag(oid, key.Type(), key.Tag(), value))
-		} else {
+		switch tagType {
+		case TAG_NONE:
 			a[VENDOR_SPECIFIC] = append(a[VENDOR_SPECIFIC], EncodeAVPairByte(oid, key.Type(), value))
+		case TAG_STRING:
+			if key.ValidTag() {
+				a[VENDOR_SPECIFIC] = append(a[VENDOR_SPECIFIC], EncodeAVPairByteTag(oid, key.Type(), key.Tag(), value))
+			} else {
+				a[VENDOR_SPECIFIC] = append(a[VENDOR_SPECIFIC], EncodeAVPairByte(oid, key.Type(), value))
+			}
+		case TAG_INTERGE:
+			if key.ValidTag() {
+				a[VENDOR_SPECIFIC] = append(a[VENDOR_SPECIFIC], EncodeAVPairByteTag(oid, key.Type(), key.Tag(), value))
+			} else {
+				a[VENDOR_SPECIFIC] = append(a[VENDOR_SPECIFIC], EncodeAVPairByteTag(oid, key.Type(), 0, value))
+			}
 		}
 	}
 }
@@ -63,7 +85,7 @@ func (a Attributes) AddRaw(key AttributeKey, value Attribute) {
 // Del removes all Attributes of the given key from a.
 func (a Attributes) Del(key AttributeKey) {
 	oid := key.Vendor()
-	hasTag := Builtin.HasTag(key)
+	hasTag := Builtin.TagType(key) > 0
 	if oid == 0 {
 		if hasTag && key.Tag() != 0 {
 			old := a[key.Type()]
@@ -110,24 +132,46 @@ func (a Attributes) Del(key AttributeKey) {
 	}
 }
 
+func stripTag(tagType int, data []byte) ([]byte, bool) {
+	switch tagType {
+	case TAG_NONE:
+		return data, true
+	case TAG_INTERGE:
+		if len(data) > 0 {
+			return data[1:], true
+		}
+		return nil, false
+	case TAG_STRING:
+		if len(data) > 0 {
+			if data[0] < 0x20 {
+				return data[1:], true
+			} else {
+				return data, true
+			}
+		}
+		return data, true
+	}
+	return nil, false
+}
+
 // LookupRaw returns the first Attribute of the given key. nil and false is returned if
 // no Attribute of Type key exists in a. The tag field will be striped if has.
 func (a Attributes) LookupRaw(key AttributeKey) (Attribute, bool) {
 	oid := key.Vendor()
-	hasTag := Builtin.HasTag(key)
+	tagType := Builtin.TagType(key)
 	if oid == 0 {
 		m := a[key.Type()]
 		if len(m) == 0 {
 			return nil, false
 		}
-		if hasTag && key.Tag() != 0 {
+		if tagType > 0 && key.ValidTag() {
 			for _, data := range m {
 				if len(data) > 0 && data[0] == key.Tag() {
 					return data[1:], true
 				}
 			}
 		} else {
-			return m[0], true
+			return stripTag(tagType, m[0])
 		}
 	} else {
 		attrs := a[VENDOR_SPECIFIC]
@@ -139,14 +183,14 @@ func (a Attributes) LookupRaw(key AttributeKey) (Attribute, bool) {
 			if err != nil {
 				return nil, false
 			}
-			if hasTag && key.Tag() != 0 {
+			if tagType > 0 && key.ValidTag() {
 				if len(data) > 0 && data[0] == key.Tag() {
 					return data[1:], true
 				}
 			} else {
 				// ignore tag
 				if MakeAttributeKey(oid, 0, t) == key.WithoutTag() {
-					return data, true
+					return stripTag(tagType, data)
 				}
 			}
 		}
