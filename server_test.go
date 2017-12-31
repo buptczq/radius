@@ -4,24 +4,16 @@ import (
 	"context"
 	"fmt"
 	"github.com/buptczq/radius"
-	"net"
 	"testing"
 	"time"
 )
 
 func TestPacketServer_basic(t *testing.T) {
-	addr, err := net.ResolveUDPAddr("udp", "localhost:1812")
-	if err != nil {
-		t.Fatal(err)
-	}
-	pc, err := net.ListenUDP("udp", addr)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	secret := []byte("123456790")
 
 	server := radius.PacketServer{
+		Addr:         "127.0.0.1:1812",
+		Network:      "udp",
 		SecretSource: radius.StaticSecretSource(secret),
 		Handler: radius.HandlerFunc(func(w radius.ResponseWriter, r *radius.Request) {
 			username := r.Packet.GetByName("User-Name").(string)
@@ -42,7 +34,7 @@ func TestPacketServer_basic(t *testing.T) {
 		client := radius.Client{
 			Retry: time.Millisecond * 50,
 		}
-		response, err := client.Exchange(context.Background(), packet, pc.LocalAddr().String())
+		response, err := client.Exchange(context.Background(), packet, "127.0.0.1:1812")
 		if err != nil {
 			clientErr = err
 			return
@@ -52,13 +44,11 @@ func TestPacketServer_basic(t *testing.T) {
 		}
 	}()
 
-	if err := server.Serve(pc); err != nil {
+	if err := server.ListenAndServe(); err != nil {
 		t.Fatal(err)
 	}
 
-	server.Shutdown(context.Background())
-
 	if clientErr != nil {
-		t.Fatal(err)
+		t.Fail()
 	}
 }

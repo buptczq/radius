@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"sync"
-	"sync/atomic"
 )
 
 type packetResponseWriter struct {
@@ -39,13 +38,66 @@ type PacketServer struct {
 	// This should only be set to true for debugging purposes.
 	InsecureSkipVerify bool
 
-	mu           sync.Mutex
-	shuttingDown bool
-	ctx          context.Context
-	ctxDone      context.CancelFunc
-	running      chan struct{}
-	listeners    map[net.PacketConn]int
-	activeCount  int32
+	mu          sync.Mutex
+	ctx         context.Context
+	ctxDone     context.CancelFunc
+	wg          sync.WaitGroup
+	connections map[net.PacketConn]struct{}
+	doneChan    chan struct{}
+}
+
+func (s *PacketServer) getDoneChanLocked() chan struct{} {
+	if s.doneChan == nil {
+		s.doneChan = make(chan struct{})
+	}
+	return s.doneChan
+}
+
+func (s *PacketServer) getDoneChan() <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.getDoneChanLocked()
+}
+
+func (s *PacketServer) closeDoneChanLocked() {
+	ch := s.getDoneChanLocked()
+	select {
+	case <-ch:
+		// Already closed. Don't close again.
+	default:
+		// Safe to close here. We're the only closer, guarded
+		// by s.mu.
+		close(ch)
+	}
+}
+
+func (s *PacketServer) closeConnectionsLocked() error {
+	var err error
+	for ln := range s.connections {
+		if cerr := ln.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+		delete(s.connections, ln)
+	}
+	return err
+}
+
+func (s *PacketServer) trackConnection(ln net.PacketConn, add bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.connections == nil {
+		s.connections = make(map[net.PacketConn]struct{})
+	}
+	if add {
+		// If the *Server is being reused after a previous
+		// Close or Shutdown, reset its doneChan:
+		if len(s.connections) == 0 {
+			s.doneChan = nil
+		}
+		s.connections[ln] = struct{}{}
+	} else {
+		delete(s.connections, ln)
+	}
 }
 
 // TODO: logger on PacketServer
@@ -59,78 +111,31 @@ func (s *PacketServer) Serve(conn net.PacketConn) error {
 		return errors.New("radius: nil SecretSource")
 	}
 
-	s.mu.Lock()
-	if s.shuttingDown {
-		s.mu.Unlock()
-		return ErrServerShutdown
-	}
-	var ctx context.Context
-	if s.ctx == nil {
-		s.ctx, s.ctxDone = context.WithCancel(context.Background())
-	}
-	ctx = s.ctx
-	if s.running == nil {
-		s.running = make(chan struct{})
-	}
-	if s.listeners == nil {
-		s.listeners = make(map[net.PacketConn]int)
-	}
-	s.listeners[conn]++
-	s.mu.Unlock()
-
-	type activeKey struct {
-		IP         string
-		Identifier byte
-	}
-
-	var (
-		activeLock sync.Mutex
-		active     = map[activeKey]struct{}{}
-	)
-
-	atomic.AddInt32(&s.activeCount, 1)
-	defer func() {
-		s.mu.Lock()
-		s.listeners[conn]--
-		if s.listeners[conn] == 0 {
-			delete(s.listeners, conn)
-		}
-		s.mu.Unlock()
-
-		if atomic.AddInt32(&s.activeCount, -1) == 0 {
-			s.mu.Lock()
-			s.shuttingDown = false
-			close(s.running)
-			s.running = nil
-			s.ctx = nil
-			s.mu.Unlock()
-		}
-	}()
+	s.trackConnection(conn, true)
+	defer s.trackConnection(conn, false)
 
 	for {
 		var buff [MaxPacketLength]byte
 		n, remoteAddr, err := conn.ReadFrom(buff[:])
 		if err != nil {
-			s.mu.Lock()
-			if s.shuttingDown {
-				s.mu.Unlock()
+			select {
+			case <-s.getDoneChan():
 				return nil
+			default:
 			}
-			s.mu.Unlock()
-
 			if ne, ok := err.(net.Error); ok && !ne.Temporary() {
 				return err
 			}
-			// TODO: log error?
 			continue
 		}
 
 		buffCopy := make([]byte, n)
 		copy(buffCopy, buff[:n])
 
-		atomic.AddInt32(&s.activeCount, 1)
+		s.wg.Add(1)
 		go func(buff []byte, remoteAddr net.Addr) {
-			secret, err := s.SecretSource.RADIUSSecret(ctx, remoteAddr)
+			defer s.wg.Done()
+			secret, err := s.SecretSource.RADIUSSecret(s.ctx, remoteAddr)
 			if err != nil {
 				// TODO: log only if server is not shutting down?
 				return
@@ -150,43 +155,16 @@ func (s *PacketServer) Serve(conn net.PacketConn) error {
 				return
 			}
 
-			key := activeKey{
-				IP:         remoteAddr.String(),
-				Identifier: packet.Identifier,
-			}
-			activeLock.Lock()
-			if _, ok := active[key]; ok {
-				activeLock.Unlock()
-				return
-			}
-			active[key] = struct{}{}
-			activeLock.Unlock()
-
 			response := packetResponseWriter{
 				conn: conn,
 				addr: remoteAddr,
 			}
 
-			defer func() {
-				activeLock.Lock()
-				delete(active, key)
-				activeLock.Unlock()
-
-				if atomic.AddInt32(&s.activeCount, -1) == 0 {
-					s.mu.Lock()
-					s.shuttingDown = false
-					close(s.running)
-					s.running = nil
-					s.ctx = nil
-					s.mu.Unlock()
-				}
-			}()
-
 			request := Request{
 				LocalAddr:  conn.LocalAddr(),
 				RemoteAddr: remoteAddr,
 				Packet:     packet,
-				ctx:        ctx,
+				ctx:        s.ctx,
 			}
 
 			s.Handler.ServeRADIUS(&response, &request)
@@ -202,52 +180,47 @@ func (s *PacketServer) ListenAndServe() error {
 	if s.SecretSource == nil {
 		return errors.New("radius: nil SecretSource")
 	}
-
 	addrStr := ":1812"
 	if s.Addr != "" {
 		addrStr = s.Addr
 	}
-
 	network := "udp"
 	if s.Network != "" {
 		network = s.Network
 	}
+	s.ctx, s.ctxDone = context.WithCancel(context.Background())
 
 	pc, err := net.ListenPacket(network, addrStr)
 	if err != nil {
 		return err
 	}
-	defer pc.Close()
 	return s.Serve(pc)
 }
 
-// Shutdown gracefully stops the server. It first closes all listeners (which
+// Shutdown gracefully stops the server. It first closes all connections (which
 // stops accepting new packets) and then waits for running handlers to complete.
 //
 // Shutdown returns after all handlers have completed, or when ctx is canceled.
 // The PacketServer is ready for re-use once the function returns nil.
 func (s *PacketServer) Shutdown(ctx context.Context) error {
 	s.mu.Lock()
-
-	if len(s.listeners) == 0 {
-		s.mu.Unlock()
-		return nil
-	}
-
-	if !s.shuttingDown {
-		s.shuttingDown = true
-		s.ctxDone()
-		for listener := range s.listeners {
-			listener.Close()
-		}
-	}
-
-	ch := s.running
+	lnerr := s.closeConnectionsLocked()
+	s.closeDoneChanLocked()
 	s.mu.Unlock()
+
+	if s.ctxDone != nil {
+		s.ctxDone()
+	}
+
+	ch := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(ch)
+	}()
 
 	select {
 	case <-ch:
-		return nil
+		return lnerr
 	case <-ctx.Done():
 		return ctx.Err()
 	}
